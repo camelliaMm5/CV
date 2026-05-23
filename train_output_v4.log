@@ -1,0 +1,52 @@
+Device: cuda
+GPU: NVIDIA GeForce RTX 4060 Laptop GPU
+Config: batch=4, epochs=150, AMP=True, crop=True, flip=True, grad_clip=1.0
+Adaptive sigma=True, color_jitter=0.2, count_loss_weight=1.2
+Stages: ep30(frz=['conv1', 'conv2', 'conv3', 'conv4'],lr=5e-04) -> ep60(frz=['conv1', 'conv2', 'conv3'],lr=1e-04) -> ep90(frz=['conv1', 'conv2'],lr=5e-05) -> ep150(frz=[],lr=2e-05)
+Loss: Multi-res SmoothL1 (70% full + 30% half) + 1.2*CountMAE
+Train: 400, Test: 316
+Params: 16.26M
+--- Stage 1: freeze=['conv1', 'conv2', 'conv3', 'conv4'], lr=5e-04, trainable=8.6M/16.3M ---
+Epoch   5/150 | Loss: 18.3625 | Val MAE: 21.21 | Val RMSE: 42.60 | Time: 28.3s | lr: 4.7e-04
+  -> Best model saved (MAE=21.21)
+Epoch  10/150 | Loss: 17.6984 | Val MAE: 20.14 | Val RMSE: 35.54 | Time: 28.2s | lr: 3.8e-04
+  -> Best model saved (MAE=20.14)
+Epoch  15/150 | Loss: 14.9566 | Val MAE: 40.14 | Val RMSE: 60.88 | Time: 28.1s | lr: 2.5e-04
+Epoch  20/150 | Loss: 12.5739 | Val MAE: 23.20 | Val RMSE: 35.05 | Time: 28.3s | lr: 1.3e-04
+Epoch  25/150 | Loss: 10.2930 | Val MAE: 19.52 | Val RMSE: 32.99 | Time: 28.0s | lr: 3.3e-05
+  -> Best model saved (MAE=19.52)
+Epoch  30/150 | Loss: 11.2695 | Val MAE: 18.26 | Val RMSE: 32.66 | Time: 28.0s | lr: 0.0e+00
+  -> Best model saved (MAE=18.26)
+--- Stage 2: freeze=['conv1', 'conv2', 'conv3'], lr=1e-04, trainable=14.5M/16.3M ---
+Epoch  35/150 | Loss: 16.8361 | Val MAE: 19.64 | Val RMSE: 33.03 | Time: 29.6s | lr: 9.3e-05
+Epoch  40/150 | Loss: 14.6061 | Val MAE: 20.83 | Val RMSE: 32.90 | Time: 29.7s | lr: 7.5e-05
+Epoch  45/150 | Loss: 12.4793 | Val MAE: 15.36 | Val RMSE: 26.57 | Time: 30.4s | lr: 5.0e-05
+  -> Best model saved (MAE=15.36)
+Epoch  50/150 | Loss: 12.0929 | Val MAE: 14.04 | Val RMSE: 20.96 | Time: 30.6s | lr: 2.5e-05
+  -> Best model saved (MAE=14.04)
+Epoch  55/150 | Loss: 9.2441 | Val MAE: 13.36 | Val RMSE: 21.38 | Time: 30.7s | lr: 6.7e-06
+  -> Best model saved (MAE=13.36)
+Epoch  60/150 | Loss: 9.4949 | Val MAE: 13.31 | Val RMSE: 21.13 | Time: 30.5s | lr: 0.0e+00
+  -> Best model saved (MAE=13.31)
+--- Stage 3: freeze=['conv1', 'conv2'], lr=5e-05, trainable=16.0M/16.3M ---
+Epoch  65/150 | Loss: 13.0889 | Val MAE: 20.94 | Val RMSE: 32.13 | Time: 31.9s | lr: 4.7e-05
+Epoch  70/150 | Loss: 13.6027 | Val MAE: 26.50 | Val RMSE: 35.11 | Time: 32.0s | lr: 3.8e-05
+Epoch  75/150 | Loss: 13.1247 | Val MAE: 17.02 | Val RMSE: 28.77 | Time: 32.1s | lr: 2.5e-05
+Epoch  80/150 | Loss: 9.4744 | Val MAE: 14.78 | Val RMSE: 23.55 | Time: 31.7s | lr: 1.3e-05
+Epoch  85/150 | Loss: 8.1572 | Val MAE: 13.71 | Val RMSE: 21.89 | Time: 31.4s | lr: 3.3e-06
+Epoch  90/150 | Loss: 9.0151 | Val MAE: 13.28 | Val RMSE: 21.46 | Time: 31.3s | lr: 0.0e+00
+  -> Best model saved (MAE=13.28)
+--- Stage 4: freeze=[], lr=2e-05, trainable=16.3M/16.3M ---
+Epoch  95/150 | Loss: 11.0894 | Val MAE: 20.95 | Val RMSE: 39.99 | Time: 34.5s | lr: 2.0e-05
+Epoch 100/150 | Loss: 10.0967 | Val MAE: 18.44 | Val RMSE: 34.09 | Time: 34.5s | lr: 1.9e-05
+Epoch 105/150 | Loss: 8.9079 | Val MAE: 11.69 | Val RMSE: 19.23 | Time: 34.2s | lr: 1.7e-05
+  -> Best model saved (MAE=11.69)
+Epoch 110/150 | Loss: 8.2417 | Val MAE: 20.87 | Val RMSE: 30.85 | Time: 34.7s | lr: 1.5e-05
+Epoch 115/150 | Loss: 9.2036 | Val MAE: 13.79 | Val RMSE: 25.39 | Time: 35.5s | lr: 1.3e-05
+Epoch 120/150 | Loss: 7.8265 | Val MAE: 13.69 | Val RMSE: 22.50 | Time: 39.9s | lr: 1.0e-05
+Epoch 125/150 | Loss: 6.9982 | Val MAE: 12.10 | Val RMSE: 19.68 | Time: 39.5s | lr: 7.4e-06
+Epoch 130/150 | Loss: 6.2061 | Val MAE: 15.37 | Val RMSE: 22.29 | Time: 40.3s | lr: 5.0e-06
+Epoch 135/150 | Loss: 6.9055 | Val MAE: 12.36 | Val RMSE: 19.69 | Time: 38.5s | lr: 2.9e-06
+Early stopping: no improvement for 30 epochs
+
+Training done. Best MAE: 11.69

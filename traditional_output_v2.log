@@ -1,0 +1,46 @@
+=================================================================
+Traditional CV Crowd Counting v2 ¡ª Weighted Ensemble
+=================================================================
+Train: 400, Test: 316
+Train count: [12, 578]
+Test  count: [9, 539]
+
+--- 1. GBR (single) ---
+Feature matrix: (400, 384) (384 dims)
+Feature selection: 384/384 retained
+Train MAE: 0.68
+GBR  Test MAE: 37.86, RMSE: 57.70, R2: 0.6337 (318s)
+
+--- 2. RF (single) ---
+Feature matrix: (400, 384) (384 dims)
+Feature selection: 384/384 retained
+Train MAE: 21.22
+RF   Test MAE: 40.26, RMSE: 62.13, R2: 0.5741 (306s)
+
+--- 3. Weighted Ensemble (GBR+RF) ---
+Feature matrix: (400, 384) (384 dims)
+Feature selection: 384/384 retained
+Weights: GBR=0.497, RF=0.503
+Val MAE: GBR=35.13, RF=34.72
+Train MAE (ensemble): 10.90
+Ens  Test MAE: 38.73, RMSE: 59.39, R2: 0.6113 (316s)
+
+=================================================================
+Comparison: Traditional v2 vs Deep Learning
+=================================================================
+Method                                   MAE     RMSE       R2    Slope
+CSRNet v4 (Deep)                       11.69    19.23    0.960    0.962
+GBR v2 (Traditional)                   37.86    57.70   0.6337        -
+RF v2 (Traditional)                    40.26    62.13   0.5741        -
+Avg Ensemble                           38.72    59.38   0.6115        -
+Weighted Ensemble                      38.73    59.39   0.6113   0.6053
+
+--- Per-Group (Weighted Ensemble) ---
+  GT 0-20: n=4, MAE=26.50, bias=26.50
+  GT 20-50: n=56, MAE=25.14, bias=24.46
+  GT 50-100: n=109, MAE=24.24, bias=17.06
+  GT 100+: n=147, MAE=54.98, bias=-17.21
+
+Saved traditional_results_v2.png
+Saved traditional_model.pkl (weighted ensemble)
+Total: 969s

@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"import scipy.io; data = scipy.io.loadmat\\('Data/train_data/ground_truth/GT_IMG_1.mat'\\); print\\(data.keys\\(\\)\\); print\\(data['image_info']\\)\")",
+      "Bash(python -m ensurepip --upgrade)"
+    ]
+  }
+}

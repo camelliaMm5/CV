@@ -1,0 +1,36 @@
+Device: cuda
+GPU: NVIDIA GeForce RTX 4060 Laptop GPU
+Config: batch=4, lr=0.0005, epochs=100, AMP=True, grad_clip=1.0, random_crop=True, flip=True, freeze_frontend=20eps
+Train: 400, Test: 316
+Params: 16.26M
+VGG frontend frozen
+Epoch   5/100 | Loss: 14.3832 | Val MAE: 22.14 | Val RMSE: 45.48 | Time: 28.4s
+  -> Best model saved (MAE=22.14)
+Epoch  10/100 | Loss: 16.5884 | Val MAE: 27.33 | Val RMSE: 49.86 | Time: 29.9s
+Epoch  15/100 | Loss: 13.8971 | Val MAE: 26.59 | Val RMSE: 49.04 | Time: 26.9s
+Epoch  20/100 | Loss: 12.1502 | Val MAE: 27.42 | Val RMSE: 42.06 | Time: 30.7s
+--- VGG frontend unfrozen, lr reduced to 5.0e-05 ---
+Epoch  25/100 | Loss: 14.5824 | Val MAE: 39.60 | Val RMSE: 64.08 | Time: 34.3s
+Epoch  30/100 | Loss: 12.3520 | Val MAE: 23.57 | Val RMSE: 37.01 | Time: 35.6s
+Epoch  35/100 | Loss: 10.4380 | Val MAE: 21.61 | Val RMSE: 33.59 | Time: 35.3s
+  -> Best model saved (MAE=21.61)
+Epoch  40/100 | Loss: 8.5380 | Val MAE: 17.60 | Val RMSE: 27.01 | Time: 34.9s
+  -> Best model saved (MAE=17.60)
+Epoch  45/100 | Loss: 9.3881 | Val MAE: 22.96 | Val RMSE: 32.23 | Time: 34.0s
+Epoch  50/100 | Loss: 10.1829 | Val MAE: 16.94 | Val RMSE: 32.37 | Time: 34.9s
+  -> Best model saved (MAE=16.94)
+Epoch  55/100 | Loss: 7.8637 | Val MAE: 21.35 | Val RMSE: 31.77 | Time: 35.3s
+Epoch  60/100 | Loss: 6.7161 | Val MAE: 14.12 | Val RMSE: 22.84 | Time: 39.0s
+  -> Best model saved (MAE=14.12)
+Epoch  65/100 | Loss: 5.8743 | Val MAE: 13.52 | Val RMSE: 21.18 | Time: 33.2s
+  -> Best model saved (MAE=13.52)
+Epoch  70/100 | Loss: 5.6764 | Val MAE: 16.50 | Val RMSE: 27.17 | Time: 33.5s
+Epoch  75/100 | Loss: 6.1435 | Val MAE: 15.83 | Val RMSE: 28.32 | Time: 33.7s
+Epoch  80/100 | Loss: 5.0023 | Val MAE: 12.01 | Val RMSE: 20.02 | Time: 33.4s
+  -> Best model saved (MAE=12.01)
+Epoch  85/100 | Loss: 4.6128 | Val MAE: 13.22 | Val RMSE: 21.66 | Time: 34.3s
+Epoch  90/100 | Loss: 4.3458 | Val MAE: 12.73 | Val RMSE: 21.28 | Time: 33.3s
+Epoch  95/100 | Loss: 3.9942 | Val MAE: 12.21 | Val RMSE: 20.13 | Time: 33.2s
+Epoch 100/100 | Loss: 4.3173 | Val MAE: 12.31 | Val RMSE: 20.31 | Time: 34.1s
+
+Training done. Best MAE: 12.01

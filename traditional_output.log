@@ -1,0 +1,39 @@
+============================================================
+Traditional CV Crowd Counting
+============================================================
+Train images: 400, Test images: 316
+Train count range: [12, 578]
+Test  count range: [9, 539]
+
+=== Feature Family Analysis ===
+  HOG         : |r|=0.307  (moderate)
+  LBP         : |r|=0.005  (weak)
+  GLCM        : |r|=0.539  (strong)
+  Edge        : |r|=0.576  (strong)
+  FFT         : |r|=0.408  (moderate)
+  Color       : |r|=0.198  (weak)
+  Foreground  : |r|=0.306  (moderate)
+D:\作业\计算机视觉\图片计数大作业\venv\Lib\site-packages\numpy\lib\_function_base_impl.py:3023: RuntimeWarning: invalid value encountered in divide
+  c /= stddev[:, None]
+D:\作业\计算机视觉\图片计数大作业\venv\Lib\site-packages\numpy\lib\_function_base_impl.py:3024: RuntimeWarning: invalid value encountered in divide
+  c /= stddev[None, :]
+  Keypoint    : |r|=nan  (weak)
+  PatchEdge   : |r|=0.618  (strong)
+
+=== Extracting features ===
+Features extracted: 88 dims in 193.0s
+
+=== Training GBR ===
+Feature matrix: (400, 88)
+Feature selection: 61/88 retained
+Train MAE: 1.31
+Traceback (most recent call last):
+  File "D:\作业\计算机视觉\图片计数大作业\traditional_train.py", line 179, in <module>
+    main()
+    ~~~~^^
+  File "D:\作业\计算机视觉\图片计数大作业\traditional_train.py", line 102, in main
+    print(f'GBR Test  MAE: {gbr_eval["mae"]:.2f}, RMSE: {gbr_eval["rmse"]:.2f}, '
+    ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+          f'R\xb2: {gbr_eval["r2"]:.4f}  ({time.time()-t0:.1f}s)')
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'gbk' codec can't encode character '\xb2' in position 36: illegal multibyte sequence
