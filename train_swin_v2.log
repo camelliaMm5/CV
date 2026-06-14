@@ -1,0 +1,19 @@
+Device: cuda
+GPU: NVIDIA GeForce RTX 4060 Laptop GPU
+Config: batch=4, epochs=100, AMP=True, crop=True, flip=True, grad_clip=1.0
+LoRA: r=32, alpha=32, dropout=0.05
+Adaptive sigma=True, color_jitter=0.2, count_loss_weight=1.2
+Loss: Multi-res SmoothL1 (70% full + 30% half) + 1.2*CountMAE
+Train: 400, Test: 316
+LoRA applied to 24 linear layers.
+Params: 28.8M total, 1.2M trainable
+Backbone: 48 trainable params (LoRA), 205 frozen
+Decoder: 12 trainable params
+Epoch   5/100 | Loss: 35.1004 | Val MAE: 35.27 | Val RMSE: 54.91 | Time: 34.4s | lr: 3.0e-04
+  -> Best model saved (MAE=35.27)
+Epoch  10/100 | Loss: 25.3587 | Val MAE: 43.67 | Val RMSE: 60.63 | Time: 31.8s | lr: 2.9e-04
+Epoch  15/100 | Loss: 28.7863 | Val MAE: 33.42 | Val RMSE: 49.47 | Time: 32.0s | lr: 2.8e-04
+  -> Best model saved (MAE=33.42)
+Epoch  20/100 | Loss: 50.0046 | Val MAE: 113.77 | Val RMSE: 142.12 | Time: 33.6s | lr: 2.7e-04
+Epoch  25/100 | Loss: 46.2786 | Val MAE: 102.60 | Val RMSE: 134.30 | Time: 31.7s | lr: 2.6e-04
+Epoch  30/100 | Loss: 54.6138 | Val MAE: 89.14 | Val RMSE: 129.00 | Time: 31.5s | lr: 2.4e-04

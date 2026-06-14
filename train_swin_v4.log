@@ -1,0 +1,57 @@
+Device: cuda
+GPU: NVIDIA GeForce RTX 4060 Laptop GPU
+Config: batch=4, epochs=120, AMP=True
+Freeze: shallow(frozen+LoRA), deep(unfrozen+LoRA)
+LoRA: r=16, alpha=16 (qkv+proj+fc1+fc2 in all blocks)
+Head: LightCountingHead (no BN, no SE, no dilated)
+Density Loss: 1.0*full + 0.1*half
+Count Loss: Phase1(1-50) MAE only, Phase2(51-120) MAE+MSE
+Adaptive sigma=True, color_jitter=0.2
+Train: 400, Test: 316
+LoRA: 24 attention + 24 MLP linears
+Freeze: frozen=71, unfrozen=230 (incl. 96 LoRA params)
+Params: 29.0M total, 27.8M trainable
+Phase 1: MAE count loss only (epoch 1-50)
+Epoch   5/120 | Loss: 32.4902 | Val MAE: 30.49 | Val RMSE: 49.54 | Time: 35.1s | lr: 2.0e-04 | phase=1
+  -> Best model saved (MAE=30.49)
+Epoch  10/120 | Loss: 24.3566 | Val MAE: 21.30 | Val RMSE: 37.70 | Time: 34.4s | lr: 2.0e-04 | phase=1
+  -> Best model saved (MAE=21.30)
+Epoch  15/120 | Loss: 20.1832 | Val MAE: 18.21 | Val RMSE: 35.98 | Time: 34.4s | lr: 1.9e-04 | phase=1
+  -> Best model saved (MAE=18.21)
+Epoch  20/120 | Loss: 21.9692 | Val MAE: 27.37 | Val RMSE: 38.16 | Time: 36.5s | lr: 1.9e-04 | phase=1
+Epoch  25/120 | Loss: 22.5361 | Val MAE: 29.73 | Val RMSE: 43.89 | Time: 36.1s | lr: 1.8e-04 | phase=1
+Epoch  30/120 | Loss: 16.8315 | Val MAE: 17.07 | Val RMSE: 27.14 | Time: 34.6s | lr: 1.7e-04 | phase=1
+  -> Best model saved (MAE=17.07)
+Epoch  35/120 | Loss: 17.6047 | Val MAE: 16.99 | Val RMSE: 29.46 | Time: 34.3s | lr: 1.6e-04 | phase=1
+  -> Best model saved (MAE=16.99)
+Epoch  40/120 | Loss: 19.6469 | Val MAE: 20.21 | Val RMSE: 29.61 | Time: 34.2s | lr: 1.5e-04 | phase=1
+Epoch  45/120 | Loss: 15.9950 | Val MAE: 12.24 | Val RMSE: 22.29 | Time: 34.1s | lr: 1.4e-04 | phase=1
+  -> Best model saved (MAE=12.24)
+Epoch  50/120 | Loss: 17.0301 | Val MAE: 14.94 | Val RMSE: 23.94 | Time: 33.9s | lr: 1.3e-04 | phase=1
+Phase 2: MAE + MSE count loss (epoch 51-120)
+Epoch  55/120 | Loss: 81.2981 | Val MAE: 14.65 | Val RMSE: 22.05 | Time: 33.9s | lr: 1.1e-04 | phase=2
+Epoch  60/120 | Loss: 66.3729 | Val MAE: 14.31 | Val RMSE: 21.16 | Time: 34.2s | lr: 1.0e-04 | phase=2
+Epoch  65/120 | Loss: 61.2279 | Val MAE: 13.14 | Val RMSE: 23.41 | Time: 43.7s | lr: 8.8e-05 | phase=2
+Epoch  70/120 | Loss: 63.3862 | Val MAE: 13.67 | Val RMSE: 20.40 | Time: 43.7s | lr: 7.5e-05 | phase=2
+Epoch  75/120 | Loss: 49.7737 | Val MAE: 10.73 | Val RMSE: 19.47 | Time: 43.2s | lr: 6.2e-05 | phase=2
+  -> Best model saved (MAE=10.73)
+Epoch  80/120 | Loss: 88.9523 | Val MAE: 11.71 | Val RMSE: 18.03 | Time: 44.8s | lr: 5.1e-05 | phase=2
+Epoch  85/120 | Loss: 99.0784 | Val MAE: 10.48 | Val RMSE: 16.61 | Time: 44.9s | lr: 4.0e-05 | phase=2
+  -> Best model saved (MAE=10.48)
+Epoch  90/120 | Loss: 37.3537 | Val MAE: 10.01 | Val RMSE: 16.56 | Time: 36.7s | lr: 3.0e-05 | phase=2
+  -> Best model saved (MAE=10.01)
+Epoch  95/120 | Loss: 41.6598 | Val MAE: 9.95 | Val RMSE: 16.08 | Time: 36.1s | lr: 2.2e-05 | phase=2
+  -> Best model saved (MAE=9.95)
+Epoch 100/120 | Loss: 54.7076 | Val MAE: 9.64 | Val RMSE: 15.79 | Time: 34.2s | lr: 1.4e-05 | phase=2
+  -> Best model saved (MAE=9.64)
+Epoch 105/120 | Loss: 33.4353 | Val MAE: 10.11 | Val RMSE: 16.26 | Time: 34.3s | lr: 8.6e-06 | phase=2
+Epoch 110/120 | Loss: 22.2978 | Val MAE: 9.81 | Val RMSE: 15.94 | Time: 38.4s | lr: 4.4e-06 | phase=2
+Epoch 115/120 | Loss: 29.1398 | Val MAE: 9.78 | Val RMSE: 15.89 | Time: 33.9s | lr: 1.9e-06 | phase=2
+Epoch 120/120 | Loss: 45.2325 | Val MAE: 9.90 | Val RMSE: 15.95 | Time: 34.2s | lr: 1.0e-06 | phase=2
+
+Training done. Best MAE: 9.64
+
+=== Final Evaluation ===
+Final Test MAE: 9.64
+Final Test RMSE: 15.79
+Final Test R^2: 0.9725

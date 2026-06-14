@@ -1,4 +1,3 @@
-import os
 import time
 import torch
 import torch.nn as nn
@@ -10,7 +9,7 @@ from torch.utils.tensorboard import SummaryWriter
 from torch.amp import GradScaler, autocast
 
 from dataset import CrowdCountingDataset
-from model import CSRNet
+from model import SwinCount
 
 
 def calc_mae_mse(pred_density, gt_density, gt_count):
@@ -37,40 +36,30 @@ def validate(model, dataloader, device):
     return total_mae / n, (total_mse / n) ** 0.5
 
 
-def freeze_vgg_stages(model, stages_to_freeze):
-    """Freeze specific VGG stages by name: 'conv1','conv2','conv3','conv4'."""
-    stage_map = {
-        'conv1': model.vgg_conv1,
-        'conv2': model.vgg_conv2,
-        'conv3': model.vgg_conv3,
-        'conv4': model.vgg_conv4,
-    }
-    for name, stage in stage_map.items():
-        requires_grad = name not in stages_to_freeze
-        for p in stage.parameters():
-            p.requires_grad = requires_grad
+def compute_loss(pred, densities, counts, criterion, phase: int = 1):
+    """Staged loss for crowd counting.
 
-
-def compute_loss(pred, densities, counts, criterion, count_loss_weight):
-    """Multi-resolution density loss + count loss.
-
-    Full-res (70%) + half-res (30%) for multi-scale density supervision,
-    plus count MAE for global count calibration.
+    Density: 1.0 * full_res + 0.1 * half_res (user feedback #7)
+    Count:
+      Phase 1: only MAE (stabilize basic counting first)
+      Phase 2: MAE + MSE (penalize large errors after counting matures)
     """
-    # Full-resolution density loss
-    loss_density_full = criterion(pred, densities)
-
-    # Half-resolution density loss (avg-pooled by 2x)
+    # Density loss — full-res dominates, half-res for coarse guidance
+    loss_full = criterion(pred, densities)
     pred_half = F.avg_pool2d(pred, kernel_size=2, stride=2)
     gt_half = F.avg_pool2d(densities, kernel_size=2, stride=2)
-    loss_density_half = criterion(pred_half, gt_half)
+    loss_half = criterion(pred_half, gt_half)
+    loss_density = 1.0 * loss_full + 0.1 * loss_half
 
-    loss_density = 0.7 * loss_density_full + 0.3 * loss_density_half
+    # Count loss — staged by phase
+    pred_counts = pred.sum(dim=(1, 2, 3))
+    loss_count_mae = torch.abs(pred_counts - counts).mean()
 
-    # Count loss
-    loss_count = torch.abs(pred.sum(dim=(1, 2, 3)) - counts).mean()
-
-    return loss_density + count_loss_weight * loss_count
+    if phase == 1:
+        return loss_density + 2.0 * loss_count_mae
+    else:
+        loss_count_mse = ((pred_counts - counts) ** 2).mean()
+        return loss_density + 2.0 * loss_count_mae + 0.5 * loss_count_mse
 
 
 def main():
@@ -78,10 +67,9 @@ def main():
     data_dir = r'Data'
     sigma = 3.0
     batch_size = 4
-    epochs = 150
+    epochs = 120
     target_size = (640, 480)
     weight_decay = 1e-4
-    count_loss_weight = 1.2
     grad_clip = 1.0
     use_amp = True
     random_crop = True
@@ -89,28 +77,30 @@ def main():
     crop_size = (512, 384)
     use_adaptive_sigma = True
     color_jitter = 0.2
-    early_stop_patience = 30  # epochs without improvement before stopping
+    early_stop_patience = 30
 
-    # Staged unfreezing: (stage_end_epoch, stages_frozen, lr)
-    # Stages to freeze are the VGG blocks NOT being trained yet
-    stages = [
-        (30,  ['conv1', 'conv2', 'conv3', 'conv4'], 5e-4),   # freeze all VGG
-        (60,  ['conv1', 'conv2', 'conv3'],          1e-4),   # unfreeze conv4
-        (90,  ['conv1', 'conv2'],                    5e-5),   # unfreeze conv3+4
-        (150, [],                                     2e-5),   # unfreeze all VGG
-    ]
+    # LoRA config
+    lora_r = 16
+    lora_alpha = 16
+    max_lr = 2e-4
+
+    # Phase boundary
+    phase_switch_epoch = 50
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     print(f'Device: {device}')
     if torch.cuda.is_available():
         print(f'GPU: {torch.cuda.get_device_name(0)}')
-    print(f'Config: batch={batch_size}, epochs={epochs}, AMP={use_amp}, '
-          f'crop={random_crop}, flip={use_flip}, grad_clip={grad_clip}')
-    print(f'Adaptive sigma={use_adaptive_sigma}, color_jitter={color_jitter}, '
-          f'count_loss_weight={count_loss_weight}')
-    print(f'Stages: {" -> ".join([f"ep{end}(frz={frz},lr={lr:.0e})" for end,frz,lr in stages])}')
-    print(f'Loss: Multi-res SmoothL1 (70% full + 30% half) + {count_loss_weight}*CountMAE')
+    print(f'Config: batch={batch_size}, epochs={epochs}, AMP={use_amp}')
+    print(f'Freeze: shallow(frozen+LoRA), deep(unfrozen+LoRA)')
+    print(f'LoRA: r={lora_r}, alpha={lora_alpha} '
+          f'(qkv+proj+fc1+fc2 in all blocks)')
+    print(f'Head: LightCountingHead (no BN, no SE, no dilated)')
+    print(f'Density Loss: 1.0*full + 0.1*half')
+    print(f'Count Loss: Phase1(1-{phase_switch_epoch}) MAE only, '
+          f'Phase2({phase_switch_epoch+1}-{epochs}) MAE+MSE')
+    print(f'Adaptive sigma={use_adaptive_sigma}, color_jitter={color_jitter}')
 
     # ===================== Dataset =====================
     train_dataset = CrowdCountingDataset(
@@ -122,48 +112,39 @@ def main():
         data_dir, split='test', sigma=sigma, resize=target_size,
     )
 
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True,
-                              num_workers=0, pin_memory=True)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False,
-                             num_workers=0, pin_memory=True)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size,
+                              shuffle=True, num_workers=0, pin_memory=True)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size,
+                             shuffle=False, num_workers=0, pin_memory=True)
 
     print(f'Train: {len(train_dataset)}, Test: {len(test_dataset)}')
 
     # ===================== Model =====================
-    model = CSRNet(pretrained=True).to(device)
-    print(f'Params: {sum(p.numel() for p in model.parameters()) / 1e6:.2f}M')
+    model = SwinCount(pretrained=True, lora_r=lora_r,
+                      lora_alpha=lora_alpha).to(device)
+    trainable, total = model.parameter_stats()
+    print(f'Params: {total:.1f}M total, {trainable:.1f}M trainable')
 
     criterion = nn.SmoothL1Loss()
-    writer = SummaryWriter(log_dir='runs/crowd_counting_v3')
+    writer = SummaryWriter(log_dir='runs/swin_count_v4')
+
+    optimizer = AdamW(model.parameters(), lr=max_lr, weight_decay=weight_decay)
+    scheduler = CosineAnnealingLR(optimizer, T_max=epochs, eta_min=1e-6)
 
     best_mae = float('inf')
-    best_path = 'best_model.pth'
+    best_path = 'best_model_swin.pth'
     epochs_no_improve = 0
-
-    optimizer = None
-    scheduler = None
     scaler = GradScaler('cuda') if use_amp else None
 
     # ===================== Training Loop =====================
-    stage_idx = 0
     for epoch in range(1, epochs + 1):
-        # Stage transition
-        if stage_idx < len(stages) and epoch == (stages[stage_idx - 1][0] + 1 if stage_idx > 0 else 1):
-            pass  # continuing stage
-
-        if stage_idx < len(stages) and epoch == stages[stage_idx][0] + 1:
-            stage_idx += 1
-
-        # Check if we need to enter a new stage
-        current_stage_end, frozen_stages, stage_lr = stages[stage_idx]
-        if epoch == 1 or (stage_idx > 0 and epoch == stages[stage_idx - 1][0] + 1):
-            freeze_vgg_stages(model, frozen_stages)
-            trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
-            total = sum(p.numel() for p in model.parameters())
-            optimizer = AdamW(model.parameters(), lr=stage_lr, weight_decay=weight_decay)
-            scheduler = CosineAnnealingLR(optimizer, T_max=current_stage_end - epoch + 1)
-            print(f'--- Stage {stage_idx+1}: freeze={frozen_stages}, lr={stage_lr:.0e}, '
-                  f'trainable={trainable/1e6:.1f}M/{total/1e6:.1f}M ---')
+        # Phase switching
+        phase = 1 if epoch <= phase_switch_epoch else 2
+        if epoch == 1:
+            print(f'Phase 1: MAE count loss only (epoch 1-{phase_switch_epoch})')
+        elif epoch == phase_switch_epoch + 1:
+            print(f'Phase 2: MAE + MSE count loss '
+                  f'(epoch {phase_switch_epoch+1}-{epochs})')
 
         model.train()
         epoch_loss = 0.0
@@ -177,10 +158,12 @@ def main():
             if use_amp:
                 with autocast('cuda'):
                     pred = model(imgs)
-                    loss = compute_loss(pred, densities, counts, criterion, count_loss_weight)
+                    loss = compute_loss(pred, densities, counts, criterion,
+                                        phase)
             else:
                 pred = model(imgs)
-                loss = compute_loss(pred, densities, counts, criterion, count_loss_weight)
+                loss = compute_loss(pred, densities, counts, criterion,
+                                    phase)
 
             optimizer.zero_grad()
             if use_amp:
@@ -209,7 +192,8 @@ def main():
 
             print(f'Epoch {epoch:3d}/{epochs} | Loss: {avg_loss:.4f} | '
                   f'Val MAE: {val_mae:.2f} | Val RMSE: {val_rmse:.2f} | '
-                  f'Time: {time.time() - t0:.1f}s | lr: {scheduler.get_last_lr()[0]:.1e}')
+                  f'Time: {time.time() - t0:.1f}s | '
+                  f'lr: {scheduler.get_last_lr()[0]:.1e} | phase={phase}')
 
             if val_mae < best_mae:
                 best_mae = val_mae
@@ -217,17 +201,48 @@ def main():
                 torch.save(model.state_dict(), best_path)
                 print(f'  -> Best model saved (MAE={best_mae:.2f})')
             else:
-                epochs_no_improve += 5  # validated every 5 epochs
+                epochs_no_improve += 5
 
             if epochs_no_improve >= early_stop_patience:
-                print(f'Early stopping: no improvement for {epochs_no_improve} epochs')
+                print(f'Early stopping at epoch {epoch} '
+                      f'(no improvement for {epochs_no_improve} epochs)')
                 break
         elif epoch % 10 == 0:
             print(f'Epoch {epoch:3d}/{epochs} | Loss: {avg_loss:.4f} | '
-                  f'Time: {time.time() - t0:.1f}s | lr: {scheduler.get_last_lr()[0]:.1e}')
+                  f'Time: {time.time() - t0:.1f}s | '
+                  f'lr: {scheduler.get_last_lr()[0]:.1e} | phase={phase}')
 
     writer.close()
     print(f'\nTraining done. Best MAE: {best_mae:.2f}')
+
+    # ===================== Final Eval =====================
+    print('\n=== Final Evaluation ===')
+    model.load_state_dict(torch.load(best_path, map_location=device,
+                                     weights_only=True))
+    model.eval()
+    all_preds = []
+    all_gts = []
+    with torch.no_grad():
+        for imgs, densities, counts in test_loader:
+            imgs = imgs.to(device)
+            densities = densities.to(device)
+            counts = counts.to(device)
+            pred = model(imgs)
+            pred_counts = pred.sum(dim=(1, 2, 3))
+            all_preds.extend(pred_counts.cpu().tolist())
+            all_gts.extend(counts.cpu().tolist())
+
+    import numpy as np
+    all_preds = np.array(all_preds)
+    all_gts = np.array(all_gts)
+    mae = np.abs(all_preds - all_gts).mean()
+    rmse = np.sqrt(((all_preds - all_gts) ** 2).mean())
+    r2 = 1 - np.sum((all_gts - all_preds) ** 2) / np.sum(
+        (all_gts - all_gts.mean()) ** 2)
+
+    print(f'Final Test MAE: {mae:.2f}')
+    print(f'Final Test RMSE: {rmse:.2f}')
+    print(f'Final Test R^2: {r2:.4f}')
 
 
 if __name__ == '__main__':

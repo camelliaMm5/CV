@@ -4,13 +4,11 @@ import torchvision.transforms as T
 from PIL import Image
 import numpy as np
 
-from model import CSRNet
+from model import SwinCount
 
 
 def predict(model, img_path, device):
-    """Predict the number of people in a single image."""
     model.eval()
-
     img = Image.open(img_path).convert('RGB')
 
     target_w, target_h = 640, 480
@@ -30,19 +28,23 @@ def predict(model, img_path, device):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Crowd Counting Inference')
+    parser = argparse.ArgumentParser(
+        description='Crowd Counting Inference (SwinV2 + LoRA)')
     parser.add_argument('image', help='Path to the input image')
-    parser.add_argument('--model', default='best_model.pth', help='Path to trained model weights')
-    parser.add_argument('--show-density', action='store_true', help='Show density map')
+    parser.add_argument('--model', default='best_model_swin.pth',
+                        help='Path to trained model weights')
+    parser.add_argument('--show-density', action='store_true',
+                        help='Show density map')
     args = parser.parse_args()
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    model = CSRNet(pretrained=False).to(device)
-    model.load_state_dict(torch.load(args.model, map_location=device, weights_only=True))
+    model = SwinCount(pretrained=False).to(device)
+    model.load_state_dict(torch.load(args.model, map_location=device,
+                                     weights_only=True))
+    model.eval()
 
     count, density = predict(model, args.image, device)
-
     print(f'Predicted count: {count}')
 
     if args.show_density:

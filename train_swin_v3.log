@@ -1,0 +1,22 @@
+Device: cuda
+GPU: NVIDIA GeForce RTX 4060 Laptop GPU
+Config: batch=4, epochs=120, AMP=True, crop=True, flip=True, grad_clip=1.0
+LoRA: r=16, alpha=16
+Adaptive sigma=True, color_jitter=0.2
+Loss: Multi-res SmoothL1 + 2.0*CountMAE + 0.5*CountMSE
+Train: 400, Test: 316
+LoRA applied to 24 linear layers.
+Params: 28.9M total, 1.4M trainable
+Epoch   5/120 | Loss: 1634.0381 | Val MAE: 78.18 | Val RMSE: 92.05 | Time: 33.6s | lr: 2.0e-04
+  -> Best model saved (MAE=78.18)
+Epoch  10/120 | Loss: 1669.5447 | Val MAE: 57.11 | Val RMSE: 87.46 | Time: 32.4s | lr: 2.0e-04
+  -> Best model saved (MAE=57.11)
+Epoch  15/120 | Loss: 2092.9617 | Val MAE: 45.53 | Val RMSE: 74.58 | Time: 32.6s | lr: 1.9e-04
+  -> Best model saved (MAE=45.53)
+Epoch  20/120 | Loss: 1847.0427 | Val MAE: 61.62 | Val RMSE: 91.92 | Time: 32.9s | lr: 1.9e-04
+Epoch  25/120 | Loss: 1946.4862 | Val MAE: 86.06 | Val RMSE: 114.61 | Time: 33.2s | lr: 1.8e-04
+Epoch  30/120 | Loss: 1565.0719 | Val MAE: 69.13 | Val RMSE: 95.90 | Time: 32.8s | lr: 1.7e-04
+Epoch  35/120 | Loss: 1685.9337 | Val MAE: 66.52 | Val RMSE: 93.06 | Time: 32.7s | lr: 1.6e-04
+Epoch  40/120 | Loss: 1565.0819 | Val MAE: 38.02 | Val RMSE: 58.95 | Time: 37.7s | lr: 1.5e-04
+  -> Best model saved (MAE=38.02)
+Epoch  45/120 | Loss: 1754.3213 | Val MAE: 44.67 | Val RMSE: 75.80 | Time: 40.6s | lr: 1.4e-04

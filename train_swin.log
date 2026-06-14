@@ -1,0 +1,48 @@
+Device: cuda
+GPU: NVIDIA GeForce RTX 4060 Laptop GPU
+Config: batch=4, epochs=100, AMP=True, crop=True, flip=True, grad_clip=1.0
+LoRA: r=16, alpha=16, dropout=0.0
+Adaptive sigma=True, color_jitter=0.2, count_loss_weight=1.2
+Loss: Multi-res SmoothL1 (70% full + 30% half) + 1.2*CountMAE
+Train: 400, Test: 316
+LoRA applied to 24 linear layers.
+Params: 28.4M total, 0.8M trainable
+Backbone: 48 trainable params (LoRA), 205 frozen
+Decoder: 12 trainable params
+Epoch   5/100 | Loss: 23.7427 | Val MAE: 37.44 | Val RMSE: 49.27 | Time: 33.0s | lr: 2.0e-04
+  -> Best model saved (MAE=37.44)
+Epoch  10/100 | Loss: 23.4144 | Val MAE: 50.59 | Val RMSE: 63.38 | Time: 32.3s | lr: 2.0e-04
+Epoch  15/100 | Loss: 26.5876 | Val MAE: 29.78 | Val RMSE: 43.86 | Time: 34.1s | lr: 1.9e-04
+  -> Best model saved (MAE=29.78)
+Epoch  20/100 | Loss: 24.5003 | Val MAE: 33.60 | Val RMSE: 45.00 | Time: 37.1s | lr: 1.8e-04
+Epoch  25/100 | Loss: 21.2750 | Val MAE: 28.04 | Val RMSE: 43.15 | Time: 34.0s | lr: 1.7e-04
+  -> Best model saved (MAE=28.04)
+Epoch  30/100 | Loss: 18.3826 | Val MAE: 27.69 | Val RMSE: 40.53 | Time: 31.4s | lr: 1.6e-04
+  -> Best model saved (MAE=27.69)
+Epoch  35/100 | Loss: 16.2624 | Val MAE: 24.35 | Val RMSE: 37.30 | Time: 31.6s | lr: 1.5e-04
+  -> Best model saved (MAE=24.35)
+Epoch  40/100 | Loss: 25.8474 | Val MAE: 23.55 | Val RMSE: 35.35 | Time: 31.8s | lr: 1.3e-04
+  -> Best model saved (MAE=23.55)
+Epoch  45/100 | Loss: 16.9904 | Val MAE: 25.95 | Val RMSE: 40.37 | Time: 31.4s | lr: 1.2e-04
+Epoch  50/100 | Loss: 19.5189 | Val MAE: 20.54 | Val RMSE: 31.72 | Time: 33.3s | lr: 1.0e-04
+  -> Best model saved (MAE=20.54)
+Epoch  55/100 | Loss: 24.9831 | Val MAE: 27.00 | Val RMSE: 40.61 | Time: 36.9s | lr: 8.5e-05
+Epoch  60/100 | Loss: 30.9471 | Val MAE: 33.76 | Val RMSE: 43.74 | Time: 31.4s | lr: 7.0e-05
+Epoch  65/100 | Loss: 19.4857 | Val MAE: 33.17 | Val RMSE: 45.95 | Time: 31.7s | lr: 5.5e-05
+Epoch  70/100 | Loss: 22.3989 | Val MAE: 34.14 | Val RMSE: 49.78 | Time: 31.5s | lr: 4.2e-05
+Epoch  75/100 | Loss: 19.2547 | Val MAE: 32.11 | Val RMSE: 47.35 | Time: 31.5s | lr: 3.0e-05
+Early stopping at epoch 75: no improvement for 25 epochs
+
+Training done. Best MAE: 20.54
+
+=== Final Evaluation ===
+Final Test MAE: 20.54
+Final Test RMSE: 31.72
+Traceback (most recent call last):
+  File "D:\作业\计算机视觉\图片计数大作业\train.py", line 241, in <module>
+    main()
+    ~~~~^^
+  File "D:\作业\计算机视觉\图片计数大作业\train.py", line 237, in main
+    print(f'Final Test R\xb2: {r2:.4f}')
+    ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'gbk' codec can't encode character '\xb2' in position 12: illegal multibyte sequence

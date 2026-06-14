@@ -10,17 +10,21 @@ import matplotlib.pyplot as plt
 from io import BytesIO
 import joblib
 
-from model import CSRNet
+from model import SwinCount
 
 # ========================
-#  Load Deep Learning model
+#  Load SwinV2 + LoRA v4 (deep)
 # ========================
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-print(f'Loading CSRNet (deep) on {device}...')
-deep_model = CSRNet(pretrained=False).to(device)
-deep_model.load_state_dict(torch.load('best_model.pth', map_location=device, weights_only=True))
+model_path = 'best_model_swin.pth'
+print(f'Loading SwinV2-T + LoRA v4 on {device}...')
+deep_model = SwinCount(pretrained=False).to(device)
+deep_model.load_state_dict(torch.load(model_path, map_location=device,
+                                       weights_only=True))
 deep_model.eval()
-print('CSRNet loaded.')
+trainable, total = deep_model.parameter_stats()
+print(f'Model loaded: {total:.1f}M total, {trainable:.1f}M trainable '
+      f'(MAE=9.64, RMSE=15.79, R^2=0.9725)')
 
 transform = T.Compose([
     T.ToTensor(),
@@ -39,7 +43,7 @@ print('Traditional model loaded.')
 #  Prediction functions
 # ========================
 def predict_deep(img):
-    """CSRNet deep learning prediction."""
+    """SwinV2 + LoRA deep learning prediction."""
     if img is None:
         return 0, None
 
@@ -55,10 +59,10 @@ def predict_deep(img):
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
     ax1.imshow(img)
-    ax1.set_title('Input (Deep)', fontsize=12)
+    ax1.set_title('Input (SwinV2 + LoRA)', fontsize=12)
     ax1.axis('off')
     ax2.imshow(density_np, cmap='jet')
-    ax2.set_title('Density Map (Deep)', fontsize=12)
+    ax2.set_title('Density Map (SwinV2 + LoRA)', fontsize=12)
     ax2.axis('off')
 
     buf = BytesIO()
@@ -77,10 +81,8 @@ def predict_traditional(img):
     target_w, target_h = 640, 480
     img_resized = img.resize((target_w, target_h), Image.BILINEAR)
 
-    # Global count prediction
     count = traditional_model.predict(img_resized)
 
-    # Patch-based density map (coarse 10x13 grid for speed)
     density_map, _ = traditional_model.predict_density_map(
         img_resized, grid_h=10, grid_w=13
     )
@@ -104,10 +106,12 @@ def predict_traditional(img):
 # ========================
 #  Gradio Blocks UI
 # ========================
-with gr.Blocks(title='Crowd Counting — Deep vs Traditional') as demo:
+with gr.Blocks(title='Crowd Counting — SwinV2+LoRA v4 vs Traditional') as demo:
     gr.Markdown(
-        '# Crowd Counting: Deep Learning vs Traditional CV\n'
-        'Upload an image to compare CSRNet (deep) with GBR + hand-crafted features (traditional).'
+        '# Crowd Counting: SwinV2-T + LoRA v4 vs Traditional CV\n'
+        'Upload an image to compare **SwinV2-T + LoRA v4** '
+        '(MAE=9.64, RMSE=15.79, R²=0.9725) with '
+        '**GBR + Hand-crafted Features** (MAE=38.73, RMSE=59.39).'
     )
 
     with gr.Row():
@@ -115,16 +119,15 @@ with gr.Blocks(title='Crowd Counting — Deep vs Traditional') as demo:
 
     with gr.Row():
         with gr.Column():
-            gr.Markdown('## Deep Learning (CSRNet v4)')
+            gr.Markdown('## SwinV2-T + LoRA v4 (MAE=9.64)')
             deep_count = gr.Number(label='Predicted Count')
             deep_density = gr.Image(type='pil', label='Density Map')
 
         with gr.Column():
-            gr.Markdown('## Traditional CV (GBR + Hand-crafted Features)')
+            gr.Markdown('## Traditional CV (MAE=38.73)')
             trad_count = gr.Number(label='Predicted Count')
             trad_density = gr.Image(type='pil', label='Density Map')
 
-    # Trigger prediction on image upload
     img_input.change(
         fn=predict_deep, inputs=img_input, outputs=[deep_count, deep_density]
     )
