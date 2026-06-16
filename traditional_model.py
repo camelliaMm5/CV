@@ -159,21 +159,18 @@ def extract_foreground_ratio(gray):
 # ======================================================================
 
 def extract_sift_density(gray):
-    """SIFT keypoint density — captures distinctive head-like features.  4 dims."""
+    """SIFT keypoint density — 3 dims (density + size stats, no response)."""
     try:
         sift = cv2.SIFT_create(nfeatures=800)
     except AttributeError:
-        # SIFT not available (needs opencv-contrib), fall back to ORB
-        return extract_keypoint_density(gray)
+        return np.array([0, 0, 0], dtype=np.float32)
     kp = sift.detect(gray, None)
     n = len(kp)
     if n == 0:
-        return np.array([0, 0, 0, 0], dtype=np.float32)
+        return np.array([0, 0, 0], dtype=np.float32)
     sizes = np.array([k.size for k in kp])
-    responses = np.array([k.response for k in kp])
     density = n / (gray.size / 10000.0)
-    return np.array([density, sizes.mean(), sizes.std(),
-                     responses.mean()], dtype=np.float32)
+    return np.array([density, sizes.mean(), sizes.std()], dtype=np.float32)
 
 
 def extract_fast_density(gray):
@@ -210,13 +207,6 @@ def extract_blob_count(gray):
     density = n / (gray.size / 10000.0)
     return np.array([density, sizes.mean(), sizes.std(),
                      np.percentile(sizes, 25), np.percentile(sizes, 75)], dtype=np.float32)
-
-
-def extract_keypoint_density(gray):
-    """ORB keypoint density — 1 dim."""
-    orb = cv2.ORB_create(nfeatures=500)
-    kp = orb.detect(gray, None)
-    return np.array([len(kp) / (gray.size / 10000.0)], dtype=np.float32)
 
 
 def extract_background_mask_stats(gray):
@@ -279,8 +269,7 @@ def extract_all_features(img_rgb):
     features.append(extract_fft_bands(gray))
     features.append(extract_glcm(gray))
 
-    # Features on CLAHE-normalized gray (illumination-robust)
-    features.append(extract_hog(gray_clahe))
+    # Features on CLAHE-normalized gray (illumination-robust, exclude HOG)
     features.append(extract_glcm(gray_clahe))
     features.append(extract_edge_density(gray_clahe))
 
@@ -291,8 +280,7 @@ def extract_all_features(img_rgb):
     features.append(extract_foreground_ratio(gray))
     features.append(extract_background_mask_stats(gray))
 
-    # Keypoint / head-like features
-    features.append(extract_keypoint_density(gray))
+    # Keypoint / head-like features (SIFT, FAST, Blob — ORB removed as redundant)
     features.append(extract_sift_density(gray))
     features.append(extract_fast_density(gray))
     features.append(extract_blob_count(gray))
@@ -318,9 +306,7 @@ class TraditionalCrowdCounter:
         self.model_type = model_type
         self.scaler = StandardScaler()
         self.selector = None
-        self.regressor = None        # single model
-        self.models = {}              # ensemble models
-        self.ensemble_weights = None  # per-model weights
+        self.regressor = None
         self.feat_dim = None
         self._X_train = None
         self._y_train = None
@@ -329,12 +315,13 @@ class TraditionalCrowdCounter:
         mt = model_type or self.model_type
         if mt == 'gbr':
             return GradientBoostingRegressor(
-                n_estimators=300, max_depth=5, learning_rate=0.05,
-                subsample=0.8, min_samples_leaf=5, random_state=42,
+                n_estimators=200, max_depth=4, learning_rate=0.03,
+                subsample=0.8, min_samples_leaf=15, random_state=42,
+                validation_fraction=0.1, n_iter_no_change=5,
             )
         elif mt == 'rf':
             return RandomForestRegressor(
-                n_estimators=300, max_depth=15, min_samples_leaf=5,
+                n_estimators=200, max_depth=12, min_samples_leaf=10,
                 random_state=42, n_jobs=-1,
             )
         elif mt == 'ridge':
@@ -383,8 +370,8 @@ class TraditionalCrowdCounter:
         print(f'Train MAE: {np.abs(preds - y).mean():.2f}')
         return self
 
-    def fit_ensemble(self, images, counts, feature_selection=True):
-        """Train weighted ensemble: GBR + RF, weights from validation MAE."""
+    def fit_stacking(self, images, counts, feature_selection=True):
+        """Stacking ensemble: GBR + RF + Ridge base, Ridge meta-learner, 5-fold CV."""
         X = np.stack([extract_all_features(img) for img in images])
         y = np.array(counts, dtype=np.float32)
         self._X_train = X
@@ -396,43 +383,23 @@ class TraditionalCrowdCounter:
         if feature_selection:
             X = self._select_features(X, y)
 
-        # Split for validation-weight estimation
-        from sklearn.model_selection import train_test_split
-        X_tr, X_val, y_tr, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
+        base_estimators = [
+            ('gbr', self._build_regressor('gbr')),
+            ('rf', self._build_regressor('rf')),
+            ('ridge', self._build_regressor('ridge')),
+        ]
+        meta = Ridge(alpha=1.0)
 
-        # Train GBR
-        gbr = self._build_regressor('gbr')
-        gbr.fit(X_tr, y_tr)
-        gbr_mae = np.abs(gbr.predict(X_val) - y_val).mean()
+        self.regressor = StackingRegressor(
+            estimators=base_estimators, final_estimator=meta,
+            cv=5, n_jobs=-1, passthrough=False,
+        )
+        self.regressor.fit(X, y)
+        self.model_type = 'stacking'
 
-        # Train RF
-        rf = self._build_regressor('rf')
-        rf.fit(X_tr, y_tr)
-        rf_mae = np.abs(rf.predict(X_val) - y_val).mean()
-
-        # Weights: inverse of MAE (normalized)
-        w_gbr = 1.0 / max(gbr_mae, 1e-6)
-        w_rf = 1.0 / max(rf_mae, 1e-6)
-        total_w = w_gbr + w_rf
-        self.ensemble_weights = {'gbr': w_gbr / total_w, 'rf': w_rf / total_w}
-        self.models = {'gbr': gbr, 'rf': rf}
-        self.model_type = 'ensemble'
-
-        # Refit on full data
-        self.models['gbr'] = self._build_regressor('gbr').fit(X, y)
-        self.models['rf'] = self._build_regressor('rf').fit(X, y)
-
-        preds = self._predict_ensemble(X)
-        print(f'Weights: GBR={self.ensemble_weights["gbr"]:.3f}, '
-              f'RF={self.ensemble_weights["rf"]:.3f}')
-        print(f'Val MAE: GBR={gbr_mae:.2f}, RF={rf_mae:.2f}')
-        print(f'Train MAE (ensemble): {np.abs(preds - y).mean():.2f}')
+        preds = self.regressor.predict(X)
+        print(f'Train MAE (stacking): {np.abs(preds - y).mean():.2f}')
         return self
-
-    def _predict_ensemble(self, X):
-        w = self.ensemble_weights
-        return w['gbr'] * self.models['gbr'].predict(X) + \
-               w['rf'] * self.models['rf'].predict(X)
 
     def predict(self, img_rgb):
         """Predict crowd count for a single image."""
@@ -441,8 +408,6 @@ class TraditionalCrowdCounter:
         if self.selector is not None:
             feats = self.selector.transform(feats)
 
-        if self.model_type == 'ensemble':
-            return max(0, self._predict_ensemble(feats)[0])
         return max(0, self.regressor.predict(feats)[0])
 
     def predict_density_map(self, img_rgb, grid_h=10, grid_w=13):

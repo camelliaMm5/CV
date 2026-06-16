@@ -1,0 +1,19 @@
+# Trained model weights (too large)
+*.pth
+*.pkl
+*.pkl_02
+
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# Gradio
+.gradio/
+
+# TensorBoard
+runs/
+
+# IDE
+.vscode/
+.idea/

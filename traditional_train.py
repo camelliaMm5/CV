@@ -1,6 +1,11 @@
 """
-Train traditional CV crowd counter v2 with weighted ensemble.
-Compares GBR, RF, weighted ensemble vs CSRNet v4.
+Train traditional CV crowd counter v3 — reduced features, stronger regularization, Stacking.
+Changes:
+  - GBR: added early_stopping, reduced depth/estimators, larger min_samples_leaf
+  - Features: removed ORB, SIFT response_mean, CLAHE_HOG
+  - Ensemble: StackingRegressor (GBR+RF+Ridge base, Ridge meta) with 5-fold CV
+  - Added Ridge single-model baseline
+  - Added 5-fold CV evaluation
 """
 
 import time, joblib
@@ -9,6 +14,8 @@ from PIL import Image
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+from sklearn.model_selection import KFold
+from sklearn.metrics import r2_score
 
 from traditional_model import TraditionalCrowdCounter, extract_all_features
 from dataset import CrowdCountingDataset
@@ -33,104 +40,129 @@ def load_data(data_dir='Data'):
     return train_imgs, train_counts, test_imgs, test_counts
 
 
+def cross_val_eval(model_type, train_imgs, train_counts, test_imgs, test_counts, n_folds=5):
+    """5-fold CV: train on folds, eval on test set. Returns (mean_mae, std_mae, mean_rmse, mean_r2, model_fit_on_all)."""
+    y_test = np.array(test_counts, dtype=np.float32)
+    y_train_raw = np.array(train_counts, dtype=np.float32)
+    n = len(train_imgs)
+
+    kf = KFold(n_splits=n_folds, shuffle=True, random_state=42)
+    fold_mae = []
+    fold_rmse = []
+    fold_r2 = []
+
+    for fold, (tr_idx, _) in enumerate(kf.split(range(n))):
+        imgs_tr = [train_imgs[i] for i in tr_idx]
+        counts_tr = y_train_raw[tr_idx]
+        model = TraditionalCrowdCounter(model_type=model_type)
+        model.fit(imgs_tr, counts_tr, feature_selection=True)
+        preds = np.array([model.predict(img) for img in test_imgs])
+        fold_mae.append(np.abs(preds - y_test).mean())
+        fold_rmse.append(np.sqrt(((preds - y_test) ** 2).mean()))
+        fold_r2.append(r2_score(y_test, preds))
+
+    # Train final model on all training data
+    final_model = TraditionalCrowdCounter(model_type=model_type)
+    final_model.fit(train_imgs, train_counts, feature_selection=True)
+
+    print(f'{model_type.upper():>6} CV{len(fold_mae)}f MAE: {np.mean(fold_mae):.2f} '
+          f'±{np.std(fold_mae):.2f}  RMSE: {np.mean(fold_rmse):.2f}  '
+          f'R2: {np.mean(fold_r2):.4f}')
+    return np.mean(fold_mae), np.std(fold_mae), np.mean(fold_rmse), np.mean(fold_r2), final_model
+
+
 def main():
     t_total = time.time()
     print('=' * 65)
-    print('Traditional CV Crowd Counting v2 — Weighted Ensemble')
+    print('Traditional CV Crowd Counting v3 — Stacking + CV')
     print('=' * 65)
 
     train_imgs, train_counts, test_imgs, test_counts = load_data()
     y_test = np.array(test_counts, dtype=np.float32)
 
-    # ---- 1. Train single GBR ----
-    print('\n--- 1. GBR (single) ---')
+    results = {}
+
+    # ---- 1. Ridge baseline ----
+    print('\n--- 1. Ridge (linear baseline) ---')
     t0 = time.time()
-    gbr = TraditionalCrowdCounter(model_type='gbr')
-    gbr.fit(train_imgs, train_counts)
-    gbr_eval = gbr.evaluate(test_imgs, test_counts)
+    ridge_cv = cross_val_eval('ridge', train_imgs, train_counts, test_imgs, test_counts)
+    ridge_eval = ridge_cv[4].evaluate(test_imgs, test_counts)
+    results['Ridge'] = ridge_eval
+    print(f'Ridge Test MAE: {ridge_eval["mae"]:.2f}, RMSE: {ridge_eval["rmse"]:.2f}, '
+          f'R2: {ridge_eval["r2"]:.4f} ({time.time()-t0:.0f}s)')
+
+    # ---- 2. GBR ----
+    print('\n--- 2. GBR (with early stopping) ---')
+    t0 = time.time()
+    gbr_cv = cross_val_eval('gbr', train_imgs, train_counts, test_imgs, test_counts)
+    gbr_eval = gbr_cv[4].evaluate(test_imgs, test_counts)
+    results['GBR'] = gbr_eval
     print(f'GBR  Test MAE: {gbr_eval["mae"]:.2f}, RMSE: {gbr_eval["rmse"]:.2f}, '
           f'R2: {gbr_eval["r2"]:.4f} ({time.time()-t0:.0f}s)')
 
-    # ---- 2. Train single RF ----
-    print('\n--- 2. RF (single) ---')
+    # ---- 3. RF ----
+    print('\n--- 3. RF ---')
     t0 = time.time()
-    rf = TraditionalCrowdCounter(model_type='rf')
-    rf.fit(train_imgs, train_counts)
-    rf_eval = rf.evaluate(test_imgs, test_counts)
+    rf_cv = cross_val_eval('rf', train_imgs, train_counts, test_imgs, test_counts)
+    rf_eval = rf_cv[4].evaluate(test_imgs, test_counts)
+    results['RF'] = rf_eval
     print(f'RF   Test MAE: {rf_eval["mae"]:.2f}, RMSE: {rf_eval["rmse"]:.2f}, '
           f'R2: {rf_eval["r2"]:.4f} ({time.time()-t0:.0f}s)')
 
-    # ---- 3. Weighted ensemble ----
-    print('\n--- 3. Weighted Ensemble (GBR+RF) ---')
+    # ---- 4. Stacking (GBR + RF + Ridge -> Ridge meta, 5-fold CV) ----
+    print('\n--- 4. Stacking (GBR+RF+Ridge -> Ridge, cv=5) ---')
     t0 = time.time()
-    ensemble = TraditionalCrowdCounter(model_type='ensemble')
-    ensemble.fit_ensemble(train_imgs, train_counts)
-    ens_eval = ensemble.evaluate(test_imgs, test_counts)
-    print(f'Ens  Test MAE: {ens_eval["mae"]:.2f}, RMSE: {ens_eval["rmse"]:.2f}, '
-          f'R2: {ens_eval["r2"]:.4f} ({time.time()-t0:.0f}s)')
+    stk = TraditionalCrowdCounter(model_type='stacking')
+    stk.fit_stacking(train_imgs, train_counts, feature_selection=True)
+    stk_eval = stk.evaluate(test_imgs, test_counts)
+    results['Stacking'] = stk_eval
+    print(f'Stk  Test MAE: {stk_eval["mae"]:.2f}, RMSE: {stk_eval["rmse"]:.2f}, '
+          f'R2: {stk_eval["r2"]:.4f} ({time.time()-t0:.0f}s)')
 
-    # ---- 4. Simple average ensemble (for comparison) ----
-    avg_preds = (gbr_eval['preds'] + rf_eval['preds']) / 2
-    avg_mae = np.abs(avg_preds - y_test).mean()
-    avg_rmse = np.sqrt(((avg_preds - y_test) ** 2).mean())
-    avg_r2 = np.corrcoef(y_test, avg_preds)[0, 1] ** 2
-
-    # ---- Comparison ----
+    # ---- Comparison Table ----
     print('\n' + '=' * 65)
-    print('Comparison: Traditional v2 vs Deep Learning')
-    print('=' * 65)
-    from numpy.polynomial.polynomial import polyfit
-    ens_coef = polyfit(y_test, ens_eval['preds'], 1)
+    print(f'{"Method":<25} {"MAE":>8} {"RMSE":>8} {"R2":>8}')
+    print('-' * 49)
+    for name in ['Ridge', 'GBR', 'RF', 'Stacking']:
+        e = results[name]
+        print(f'{name:<25} {e["mae"]:>8.2f} {e["rmse"]:>8.2f} {e["r2"]:>8.4f}')
 
-    print(f'{"Method":<35} {"MAE":>8} {"RMSE":>8} {"R2":>8} {"Slope":>8}')
-    print(f'{"CSRNet v4 (Deep)":<35} {"11.69":>8} {"19.23":>8} {"0.960":>8} {"0.962":>8}')
-    print(f'{"GBR v2 (Traditional)":<35} {gbr_eval["mae"]:>8.2f} {gbr_eval["rmse"]:>8.2f} '
-          f'{gbr_eval["r2"]:>8.4f} {"-":>8}')
-    print(f'{"RF v2 (Traditional)":<35} {rf_eval["mae"]:>8.2f} {rf_eval["rmse"]:>8.2f} '
-          f'{rf_eval["r2"]:>8.4f} {"-":>8}')
-    print(f'{"Avg Ensemble":<35} {avg_mae:>8.2f} {avg_rmse:>8.2f} {avg_r2:>8.4f} {"-":>8}')
-    print(f'{"Weighted Ensemble":<35} {ens_eval["mae"]:>8.2f} {ens_eval["rmse"]:>8.2f} '
-          f'{ens_eval["r2"]:>8.4f} {ens_coef[1]:>8.4f}')
-
-    # Per-group analysis
-    print('\n--- Per-Group (Weighted Ensemble) ---')
+    # ---- Per-Group Analysis (Stacking) ----
+    print('\n--- Per-Group (Stacking) ---')
     for lo, hi, label in [(0, 20, '0-20'), (20, 50, '20-50'),
                            (50, 100, '50-100'), (100, 999, '100+')]:
         mask = (y_test >= lo) & (y_test < hi)
         if mask.sum() > 0:
-            mae_g = np.abs(ens_eval['preds'][mask] - y_test[mask]).mean()
-            bias_g = ens_eval['preds'][mask].mean() - y_test[mask].mean()
-            print(f'  GT {label}: n={mask.sum()}, MAE={mae_g:.2f}, bias={bias_g:.2f}')
+            mae_g = np.abs(stk_eval['preds'][mask] - y_test[mask]).mean()
+            bias_g = stk_eval['preds'][mask].mean() - y_test[mask].mean()
+            print(f'  GT {label:>5}: n={mask.sum():>3}, MAE={mae_g:.2f}, bias={bias_g:+.2f}')
 
-    # Scatter comparison
-    fig, axes = plt.subplots(1, 3, figsize=(18, 6))
-    for ax, preds, title in [
-        (axes[0], gbr_eval['preds'], 'GBR v2'),
-        (axes[1], rf_eval['preds'], 'RF v2'),
-        (axes[2], ens_eval['preds'], 'Weighted Ensemble'),
-    ]:
-        ax.scatter(y_test, preds, alpha=0.4, s=10, c='steelblue', edgecolors='none')
+    # ---- Scatter Plots ----
+    from numpy.polynomial.polynomial import polyfit
+
+    fig, axes = plt.subplots(2, 2, figsize=(14, 14))
+    axes = axes.flatten()
+    for ax, (name, e) in zip(axes, results.items()):
+        ax.scatter(y_test, e['preds'], alpha=0.4, s=10, c='steelblue', edgecolors='none')
         ax.plot([0, 600], [0, 600], 'r--', linewidth=1)
-        coef = polyfit(y_test, preds, 1)
+        coef = polyfit(y_test, e['preds'], 1)
         xl = np.array([0, 600])
         ax.plot(xl, coef[0] + coef[1] * xl, 'orange', linewidth=1.5,
                 label=f'slope={coef[1]:.3f}')
         ax.set_xlim(0, 600); ax.set_ylim(0, 600)
-        mae = np.abs(preds - y_test).mean()
-        r2 = np.corrcoef(y_test, preds)[0, 1] ** 2
         ax.set_xlabel('Ground Truth'); ax.set_ylabel('Predicted')
-        ax.set_title(f'{title}: MAE={mae:.1f}, R2={r2:.3f}')
+        ax.set_title(f'{name}: MAE={e["mae"]:.1f}, RMSE={e["rmse"]:.1f}, R2={e["r2"]:.3f}')
         ax.legend(); ax.grid(True, alpha=0.3); ax.set_aspect('equal')
 
-    fig.suptitle('Traditional CV Crowd Counting v2', fontsize=14, fontweight='bold')
+    fig.suptitle('Traditional CV Crowd Counting v3 (Stacking)', fontsize=14, fontweight='bold')
     fig.tight_layout()
-    fig.savefig('traditional_results_v2.png', dpi=150, bbox_inches='tight')
+    fig.savefig('traditional_results_v3.png', dpi=150, bbox_inches='tight')
     plt.close()
-    print('\nSaved traditional_results_v2.png')
+    print('\nSaved traditional_results_v3.png')
 
-    # Save best model
-    joblib.dump(ensemble, 'traditional_model.pkl')
-    print(f'Saved traditional_model.pkl (weighted ensemble)')
+    # Save best model (Stacking)
+    joblib.dump(stk, 'traditional_model_v3.pkl')
+    print(f'Saved traditional_model_v3.pkl')
     print(f'Total: {time.time()-t_total:.0f}s')
 
 
